@@ -1,0 +1,8 @@
+[Unit]
+Description=BirdNET SQLite 24-Hour Cleanup
+
+[Service]
+Type=oneshot
+User=jolin
+WorkingDirectory=/home/jolin
+ExecStart=/usr/bin/python3 /home/jolin/birdnet_cleanup.py
