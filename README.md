@@ -457,8 +457,6 @@ BirdNET-RaspberryPi-IoT/
 |   |-- node-heartbeat.service
 |   |-- birdnet-cleanup.service
 |   |-- birdnet-cleanup.timer
-|
-|-- docs/
 ```
 
 ### Python files
@@ -551,11 +549,7 @@ The verified direct dependencies are:
 | `sounddevice` | 0.5.6 |
 | `paho-mqtt` | 2.1.0 |
 
-These are recorded in:
-
-```text
-requirements-api.txt
-```
+These are recorded in `requirements-api.txt`.
 
 Create and activate the virtual environment:
 
@@ -593,11 +587,7 @@ The verified packages are:
 | `paho-mqtt` | 2.1.0 |
 | `birdnet-analyzer` | 2.4.0 |
 
-These are recorded in:
-
-```text
-requirements-services.txt
-```
+These are recorded in `requirements-services.txt`.
 
 Create and activate the second virtual environment:
 
@@ -743,8 +733,6 @@ The BirdNode2 implementation has been used to test:
 - Heartbeat publishing.
 - Daily SQLite cleanup.
 
-The cleanup script has successfully deleted delivered records older than 24 hours while protecting pending records, with SQLite integrity verification.
-
 Further testing is recommended for multi-node deployments, prolonged connectivity outages, unexpected power loss, duplicate handling and reproducible installation on a new Raspberry Pi.
 
 ## 17. Future Research
@@ -776,3 +764,158 @@ This repository provides the original BirdNode2 implementation of a Raspberry Pi
 It demonstrates the integration of local BirdNET inference, SQLite buffering, MQTT communication, Firebase Firestore, application-level acknowledgement and automatic storage management.
 
 The repository is intended to support documentation, further development and future research.
+
+## 19. Multi-Node Firestore Deployment
+
+The BirdNET IoT architecture is designed to support multiple Raspberry Pi monitoring nodes contributing bird-detection records to a single Firebase Firestore database.
+
+Each Raspberry Pi performs local bird detection and maintains its own SQLite buffer. Detection events are transmitted through MQTT to a central MQTT-to-Firestore bridge, allowing researchers to collect and analyze detections from multiple monitoring locations.
+
+### 19.1 Multi-Node Architecture
+
+```text
+BirdNode2 -- SQLite -- MQTT --+
+                              |
+BirdNode3 -- SQLite -- MQTT --+-- Central MQTT Broker
+                              |           |
+BirdNode4 -- SQLite -- MQTT --+           |
+                                          v
+                               MQTT-to-Firestore Bridge
+                                          |
+                                          v
+                               One Firebase Firestore
+                                          |
+                                          v
+                              Multi-Node Research Dashboard
+```
+
+The diagram represents the intended shared-broker architecture. Network connectivity and access to the central broker must be configured separately.
+
+### 19.2 Unique Node Identification
+
+Each Raspberry Pi must use a unique node identifier.
+
+Examples:
+
+```python
+NODE_ID = "birdnode2"
+NODE_ID = "birdnode3"
+NODE_ID = "birdnode4"
+```
+
+The identifier must be configured consistently across the relevant scripts on each Raspberry Pi.
+
+Each detection record should retain its originating `node_id` so that researchers can distinguish data from different monitoring locations.
+
+### 19.3 MQTT Broker Configuration
+
+The original BirdNode2 configuration uses:
+
+```python
+MQTT_BROKER = "localhost"
+MQTT_PORT = 1883
+```
+
+This connects to a broker running on the same Raspberry Pi.
+
+For multiple nodes using one central broker, the participating nodes must connect to a reachable shared MQTT broker.
+
+Example:
+
+```python
+MQTT_BROKER = "192.168.1.100"
+MQTT_PORT = 1883
+```
+
+The IP address is an example only and must be replaced with the actual broker address.
+
+Remote MQTT connections require appropriate network routing, broker listener configuration, authentication, and access controls. An unsecured MQTT port should not be exposed directly to the public internet.
+
+### 19.4 MQTT Topic Structure
+
+Each Raspberry Pi publishes detections using its unique node identifier.
+
+Examples:
+
+```text
+birdnet/birdnode2/detections
+birdnet/birdnode3/detections
+birdnet/birdnode4/detections
+```
+
+The central MQTT-to-Firestore bridge can subscribe to:
+
+```text
+birdnet/+/detections
+```
+
+The `+` wildcard matches one MQTT topic level, allowing one bridge to receive detection messages from multiple nodes.
+
+Application-level acknowledgements use node-specific topics:
+
+```text
+birdnet/birdnode2/acks
+birdnet/birdnode3/acks
+birdnet/birdnode4/acks
+```
+
+This enables acknowledgements to be directed to the appropriate originating node, provided the bridge and publisher are configured consistently.
+
+### 19.5 Centralized Firebase Firestore
+
+All participating nodes can contribute detection records to the same Firebase project and Firestore database.
+
+Each record should preserve:
+
+- `node_id` — Originating Raspberry Pi.
+- `species_code` — Bird species identifier.
+- `confidence` — BirdNET prediction confidence.
+- `timestamp` — Detection time.
+- `event_id` — Identifier used for event tracking and duplicate handling.
+
+The exact Firestore field names and document structure should follow the deployed bridge implementation.
+
+Researchers can filter and aggregate records by node identifier, species and detection time.
+
+Each Raspberry Pi does not require its own Firebase service-account credential when a single authorized central bridge performs the Firestore writes.
+
+### 19.6 Offline Buffering and ACK Handling
+
+Each Raspberry Pi maintains its own SQLite database.
+
+The local event-delivery workflow is:
+
+1. BirdNET detects and finalizes a bird event.
+2. The event is stored in the local SQLite database.
+3. The publisher sends the event to the central MQTT broker.
+4. The central bridge writes the event to Firestore.
+5. After successful storage, the bridge publishes an application-level ACK.
+6. The originating Raspberry Pi receives the ACK.
+7. The matching local SQLite event is marked as delivered.
+
+If an ACK is not received, the event remains pending and may be retried.
+
+MQTT QoS 1 provides at-least-once message delivery, so duplicate handling remains important. Event identifiers should be unique across nodes, and Firestore writes should handle repeated deliveries safely.
+
+### 19.7 Adding Another Raspberry Pi Node
+
+To integrate another Raspberry Pi into the shared monitoring system:
+
+1. Install and configure the required BirdNET detection, SQLite and MQTT publisher components.
+2. Assign a unique `NODE_ID`.
+3. Configure the microphone, species list and monitoring coordinates.
+4. Set the MQTT broker address to the reachable central broker.
+5. Ensure the publisher subscribes to the correct node-specific ACK topic.
+6. Configure network access and MQTT authentication.
+7. Start the appropriate monitoring and publishing services.
+8. Verify that the central bridge receives the new node's detections.
+9. Confirm that records appear in Firestore with the correct `node_id`.
+10. Verify that successful Firestore writes generate ACK messages and update the originating node's SQLite delivery status.
+
+### 19.8 Deployment and Validation Notes
+
+The repository preserves the original BirdNode2 configuration and scripts. Multi-node deployment requires additional configuration on each Raspberry Pi and the central MQTT infrastructure.
+
+The architecture supports centralized collection, but the README does not establish that every multi-node scenario has been experimentally validated.
+
+Before research deployment, verify connectivity, event identifiers, ACK routing, Firestore record structure, and offline recovery for each participating node.
