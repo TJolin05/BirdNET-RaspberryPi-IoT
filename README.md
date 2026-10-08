@@ -84,8 +84,10 @@ A separate heartbeat service publishes node-status messages, while a daily clean
 | Component | Technology |
 |---|---|
 | Operating system | Raspberry Pi OS Lite (64-bit) |
-| Programming language | Python 3 |
-| Bird identification | BirdNET V2.4 |
+| Programming language | Python 3.13 |
+| Bird identification model | BirdNET V2.4 |
+| BirdNET Python API | `birdnet 1.1.1` |
+| BirdNET Analyzer | `birdnet-analyzer 2.4.0` |
 | Inference | BirdNET Python API / LiteRT |
 | Audio processing | NumPy, SoundDevice |
 | Local storage | SQLite |
@@ -142,9 +144,9 @@ The project includes a Malaysian bird species configuration file:
 config/malaysia_28_species.txt
 ```
 
-This file is required by the original streaming detector.
+Although the filename contains `28`, the current file contains **60 species entries**. The original filename is retained for compatibility with the existing BirdNode2 implementation.
 
-The original BirdNode2 script expects the file at:
+The original streaming script expects the file at:
 
 ```text
 /home/jolin/malaysia_28_species.txt
@@ -152,19 +154,19 @@ The original BirdNode2 script expects the file at:
 
 For deployment on another Raspberry Pi, either copy the species file to the expected location or update the `SPECIES_LIST` variable in `streaming_ram_test_v3.py`.
 
-For example:
+For example, after cloning the repository:
 
 ```bash
 cp config/malaysia_28_species.txt ~/malaysia_28_species.txt
 ```
 
-The script also references the BirdNET Analyzer taxonomy file:
+The streaming script also references the BirdNET Analyzer taxonomy file:
 
 ```text
 eBird_taxonomy_codes_2024E.json
 ```
 
-The taxonomy file is expected from the installed BirdNET Analyzer package. Its path must be updated if the Python environment or package installation differs from the original deployment.
+The taxonomy file is provided by the installed BirdNET Analyzer package. Its path must be updated if the Python environment or package installation differs from the original deployment.
 
 ## 6. SQLite Offline Buffering
 
@@ -261,6 +263,20 @@ MQTT_QOS = 1
 
 If the broker is hosted on another device, the MQTT broker address must be updated.
 
+### Multi-node support
+
+The topic structure can support multiple Raspberry Pi nodes using unique node identifiers.
+
+For example, a subscriber can use:
+
+```text
+birdnet/+/detections
+```
+
+This allows one MQTT subscriber to receive detection messages from multiple nodes.
+
+The original implementation has been tested on BirdNode2. Additional validation is required for larger multi-node deployments.
+
 ## 8. MQTT QoS 1 and Application-Level ACK
 
 The system uses two acknowledgement mechanisms.
@@ -356,9 +372,9 @@ Example:
 birdnet/birdnode2/heartbeat
 ```
 
-Heartbeat messages can be used to track node activity and support future monitoring dashboards.
+The MQTT-to-Firestore bridge can use heartbeat messages to update node-status information in Firestore.
 
-They can also help distinguish periods without bird detections from periods when a Raspberry Pi has stopped reporting.
+Heartbeat data supports future monitoring dashboards and helps distinguish periods without bird detections from periods when a Raspberry Pi is not reporting.
 
 ## 11. Automatic SQLite Cleanup
 
@@ -420,6 +436,8 @@ BirdNET-RaspberryPi-IoT/
 |
 |-- README.md
 |-- .gitignore
+|-- requirements-api.txt
+|-- requirements-services.txt
 |
 |-- config/
 |   |-- malaysia_28_species.txt
@@ -453,6 +471,13 @@ BirdNET-RaspberryPi-IoT/
 | `mqtt_to_firebase.py` | MQTT subscription and Firestore integration |
 | `node_heartbeat.py` | Node heartbeat publishing |
 | `birdnet_cleanup.py` | Automatic database cleanup |
+
+### Dependency files
+
+| File | Purpose |
+|---|---|
+| `requirements-api.txt` | Verified direct dependencies for BirdNET streaming and SQLite-to-MQTT |
+| `requirements-services.txt` | Verified dependencies for Firestore, heartbeat and BirdNET Analyzer |
 
 ## 13. Deployment Configuration Notes
 
@@ -504,17 +529,96 @@ sudo apt update
 sudo apt install -y python3 python3-pip python3-venv mosquitto mosquitto-clients ffmpeg
 ```
 
-Additional audio dependencies and Python packages are required.
+Additional audio dependencies and Python packages may be required.
 
 ### Step 3 — Configure Python environments
 
-Create Python virtual environments compatible with the selected BirdNET and Firebase dependencies.
+The original BirdNode2 implementation uses Python 3.13 with two separate virtual environments.
 
-The original implementation uses separate environments for BirdNET inference and other services.
+**Environment 1: BirdNET API (`birdnet-api-env`)**
 
-Install the required libraries for the corresponding scripts, including BirdNET, NumPy, SoundDevice, Paho MQTT and Firebase Admin SDK.
+This environment is used by:
 
-Exact dependency versions should be verified against the original tested environments before attempting full reproduction.
+- `streaming_ram_test_v3.py`
+- `sqlite_to_mqtt.py`
+
+The verified direct dependencies are:
+
+| Package | Version |
+|---|---|
+| `birdnet` | 1.1.1 |
+| `numpy` | 2.5.3 |
+| `sounddevice` | 0.5.6 |
+| `paho-mqtt` | 2.1.0 |
+
+These are recorded in:
+
+```text
+requirements-api.txt
+```
+
+Create and activate the virtual environment:
+
+```bash
+python3 -m venv ~/birdnet-api-env
+source ~/birdnet-api-env/bin/activate
+```
+
+Install the dependencies:
+
+```bash
+python -m pip install -r requirements-api.txt
+```
+
+Deactivate when finished:
+
+```bash
+deactivate
+```
+
+**Environment 2: BirdNET Services (`birdnet-env`)**
+
+This environment is used by:
+
+- `mqtt_to_firebase.py`
+- `node_heartbeat.py`
+
+It also contains BirdNET Analyzer, which provides the taxonomy JSON file referenced by the streaming detector.
+
+The verified packages are:
+
+| Package | Version |
+|---|---|
+| `firebase-admin` | 7.5.0 |
+| `paho-mqtt` | 2.1.0 |
+| `birdnet-analyzer` | 2.4.0 |
+
+These are recorded in:
+
+```text
+requirements-services.txt
+```
+
+Create and activate the second virtual environment:
+
+```bash
+python3 -m venv ~/birdnet-env
+source ~/birdnet-env/bin/activate
+```
+
+Install the dependencies:
+
+```bash
+python -m pip install -r requirements-services.txt
+```
+
+Deactivate when finished:
+
+```bash
+deactivate
+```
+
+**Note:** These versions were recorded from the original BirdNode2 installation. The installation commands are intended for a new deployment, not for modifying the existing working environments. Python version, operating-system packages, processor architecture and transitive dependencies may affect compatibility.
 
 ### Step 4 — Configure required files
 
@@ -535,11 +639,15 @@ Update the following settings as required:
 - Node identifier.
 - Geographic coordinates.
 
+Verify that the taxonomy JSON file is available in the installed BirdNET Analyzer package and update the streaming script if necessary.
+
 ### Step 5 — Configure systemd services
 
 The original systemd files use absolute paths under `/home/jolin/`.
 
 Before installing them, update each service file to match the target Raspberry Pi username, Python environments and script locations.
+
+The original service files expect the Python scripts to be deployed directly under the configured user's home directory, rather than executed from the repository's `scripts/` folder.
 
 After configuring and deploying the scripts to their intended paths, install the service files:
 
@@ -570,6 +678,7 @@ systemctl status sqlite-to-mqtt.service
 systemctl status mqtt-bridge.service
 systemctl status node-heartbeat.service
 systemctl status birdnet-cleanup.timer
+systemctl status mosquitto.service
 ```
 
 ### Step 8 — View logs
