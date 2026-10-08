@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*-env/
+
+# Credentials and secrets
+.env
+.env.*
+!.env.example
+*service-account*.json
+*firebase*key*.json
+*credentials*.json
+*secret*.json
+
+# SQLite
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Audio and output
+*.wav
+*.mp3
+live_output/
+results/
+logs/
+*.log
+
+# Temporary files
+*.tmp
+.DS_Store

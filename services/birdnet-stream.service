@@ -1,0 +1,19 @@
+[Unit]
+Description=BirdNET V2.4 Continuous RAM Streaming Detector
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=jolin
+WorkingDirectory=/home/jolin
+
+ExecStart=/home/jolin/birdnet-api-env/bin/python /home/jolin/streaming_ram_test_v3.py
+
+Restart=always
+RestartSec=5
+
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

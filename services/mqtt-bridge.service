@@ -1,0 +1,13 @@
+[Unit]
+Description=Subscribe to local MQTT broker and forward detections to Firestore
+After=network-online.target mosquitto.service
+
+[Service]
+ExecStart=/home/jolin/birdnet-env/bin/python /home/jolin/mqtt_to_firebase.py
+WorkingDirectory=/home/jolin
+Restart=always
+RestartSec=5
+User=jolin
+
+[Install]
+WantedBy=multi-user.target

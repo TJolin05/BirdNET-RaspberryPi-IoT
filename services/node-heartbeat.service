@@ -1,0 +1,17 @@
+[Unit]
+Description=BirdNET Node Heartbeat Publisher
+After=network-online.target mosquitto.service
+Wants=network-online.target
+Requires=mosquitto.service
+
+[Service]
+Type=simple
+User=jolin
+WorkingDirectory=/home/jolin
+ExecStart=/home/jolin/birdnet-env/bin/python /home/jolin/node_heartbeat.py
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

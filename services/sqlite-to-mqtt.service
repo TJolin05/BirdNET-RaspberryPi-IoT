@@ -1,0 +1,19 @@
+[Unit]
+Description=BirdNET SQLite to MQTT Publisher with Firestore ACK
+After=network.target mosquitto.service
+Wants=mosquitto.service
+
+[Service]
+Type=simple
+User=jolin
+WorkingDirectory=/home/jolin
+
+ExecStart=/home/jolin/birdnet-api-env/bin/python /home/jolin/sqlite_to_mqtt.py
+
+Restart=always
+RestartSec=5
+
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
